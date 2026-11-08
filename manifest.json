@@ -1,0 +1,19 @@
+{
+  "name": "皮克敏種花金幣計時器 (Pikmin Bloom Companion)",
+  "short_name": "種花計時器",
+  "description": "專為 Pikmin Bloom 玩家設計的種花金幣計算、花瓣消耗預估與防浪費鬧鐘 PWA",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#E2F0D9",
+  "theme_color": "#78B933",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

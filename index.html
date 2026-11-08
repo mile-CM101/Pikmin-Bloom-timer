@@ -1,0 +1,1143 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>皮克敏種花金幣計時器 | Pikmin Bloom Companion</title>
+
+  <!-- PWA 設定 -->
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" type="image/svg+xml" href="./icon.svg">
+  <link rel="apple-touch-icon" href="./icon.svg">
+  <meta name="theme-color" content="#78B933">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="種花計時器">
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Google Fonts: Fredoka & Noto Sans TC -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@600;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --pikmin-green: #78B933;
+      --pikmin-dark-green: #4E7A22;
+      --pikmin-cream: #FFFDF2;
+      --petal-color: #FF8EA1;
+    }
+
+    body {
+      font-family: 'Noto Sans TC', sans-serif;
+      background: linear-gradient(180deg, #E2F0D9 0%, #C3E2B1 55%, #AED598 100%);
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    .pikmin-font {
+      font-family: 'Fredoka', 'Noto Sans TC', sans-serif;
+    }
+
+    /* 皮克敏風立體卡片 */
+    .pikmin-card {
+      box-shadow: 0 10px 0px #8AB868, 0 20px 30px rgba(62, 102, 28, 0.18);
+    }
+
+    /* 3D 按壓按鈕 */
+    .btn-3d-green {
+      background: linear-gradient(180deg, #87CD3E 0%, #6FB02B 100%);
+      box-shadow: 0 5px 0 #4D8018, 0 8px 15px rgba(77, 128, 24, 0.25);
+      transition: all 0.12s ease;
+    }
+    .btn-3d-green:hover:not(:disabled) {
+      filter: brightness(1.03);
+    }
+    .btn-3d-green:active:not(:disabled) {
+      transform: translateY(4px);
+      box-shadow: 0 1px 0 #4D8018;
+    }
+
+    .btn-3d-amber {
+      background: linear-gradient(180deg, #FBBF24 0%, #D97706 100%);
+      box-shadow: 0 5px 0 #92400E;
+      transition: all 0.12s ease;
+    }
+    .btn-3d-amber:active:not(:disabled) {
+      transform: translateY(4px);
+      box-shadow: 0 1px 0 #92400E;
+    }
+
+    /* 巨大花朵搖曳動畫 */
+    @keyframes sway {
+      0%, 100% { transform: rotate(-3deg) scale(1); }
+      50% { transform: rotate(3deg) scale(1.04); }
+    }
+    .flower-sway {
+      animation: sway 3.2s ease-in-out infinite;
+      transform-origin: bottom center;
+    }
+
+    /* 花瓣漂浮背景特效 */
+    .petal {
+      position: absolute;
+      border-radius: 150% 0 150% 150%;
+      animation: floatUp linear infinite;
+      opacity: 0.65;
+      pointer-events: none;
+    }
+    @keyframes floatUp {
+      0% { transform: translateY(105vh) rotate(0deg) translateX(0px); opacity: 0; }
+      12% { opacity: 0.65; }
+      50% { transform: translateY(50vh) rotate(180deg) translateX(18px); }
+      88% { opacity: 0.65; }
+      100% { transform: translateY(-10vh) rotate(360deg) translateX(-12px); opacity: 0; }
+    }
+
+    /* 花瓣罐液位波浪 */
+    .jar-liquid {
+      transition: height 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), background-color 0.3s ease;
+    }
+
+    /* 隱藏預設數字輸入框上下箭頭 (更乾淨) */
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button {
+      opacity: 1;
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col items-center justify-start py-5 px-3 sm:px-4 relative overflow-x-hidden select-none">
+
+  <!-- 背景漂浮花瓣容器 -->
+  <div id="petal-container" class="fixed inset-0 z-0 overflow-hidden pointer-events-none"></div>
+
+  <!-- 主卡片容器 -->
+  <main class="w-full max-w-md bg-white/95 backdrop-blur-sm rounded-[2rem] p-5 sm:p-6 z-10 border-4 border-[#78B933] pikmin-card relative">
+
+    <!-- 頂部狀態列：PWA 安裝與音效測試 -->
+    <div class="flex items-center justify-between mb-3">
+      <div class="inline-flex items-center gap-1.5 bg-[#78B933] text-white px-3 py-1 rounded-full text-[11px] font-bold shadow-sm">
+        <span>🌱</span>
+        <span>PIKMIN BLOOM COMPANION</span>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <button id="install-pwa-btn" class="hidden bg-[#FEF3C7] hover:bg-[#FDE68A] text-[#92400E] border border-[#F59E0B] px-2.5 py-1 rounded-full text-[11px] font-bold transition">
+          📲 安裝 App
+        </button>
+        <button id="test-sound-btn" title="測試鬧鐘音效" class="bg-[#F0F7EA] hover:bg-[#E1F0D5] text-[#4E7A22] border border-[#C3E2B1] px-2.5 py-1 rounded-full text-[11px] font-bold transition flex items-center gap-1">
+          🔔 試聽鈴聲
+        </button>
+      </div>
+    </div>
+
+    <!-- 頂部標題 -->
+    <header class="text-center mb-5">
+      <h1 class="text-2xl sm:text-[26px] font-black text-[#3F6818] pikmin-font flex justify-center items-center gap-1.5 tracking-tight">
+        <span>🌸</span> 皮克敏種花金幣計時器 <span>🪙</span>
+      </h1>
+      <p class="text-xs text-[#6E8F4E] mt-1 font-medium">
+        精準計算種花時間與花瓣消耗，一滴精華都不浪費！
+      </p>
+    </header>
+
+    <!-- 花瓣顏色與花瓣罐視覺面板 -->
+    <section class="mb-4 bg-gradient-to-r from-[#F7FAF4] to-[#EFF7E8] p-3.5 rounded-2xl border-2 border-[#D2E7C4] flex items-center gap-3.5">
+      <!-- 花瓣玻璃罐動畫 -->
+      <div class="relative w-14 h-20 bg-white/90 rounded-2xl border-2 border-[#9AC47B] overflow-hidden flex-shrink-0 shadow-inner flex flex-col justify-end">
+        <!-- 瓶蓋 -->
+        <div class="absolute top-0 inset-x-0 h-2.5 bg-[#78B933] border-b border-[#5B8E24] z-10"></div>
+        <!-- 液體高度 -->
+        <div id="jar-fill" class="jar-liquid w-full bg-[#FF8EA1]/80 relative" style="height: 100%;"></div>
+        <!-- 罐身文字 -->
+        <div class="absolute inset-0 flex flex-col items-center justify-center z-10 pt-2">
+          <span id="jar-percent-text" class="text-[11px] font-black text-[#3B591B] drop-shadow-sm">100%</span>
+          <span id="jar-time-text" class="text-[9px] font-bold text-[#52772C]">83分</span>
+        </div>
+      </div>
+
+      <!-- 右側：目前花瓣存量與花色選擇 -->
+      <div class="flex-1 min-w-0">
+        <div class="flex items-center justify-between mb-1">
+          <label for="current-petals" class="text-xs font-extrabold text-[#4E7A22] flex items-center gap-1">
+            💧 目前花瓣存量 (片)
+          </label>
+          <!-- 花色切換小圓點 -->
+          <div class="flex items-center gap-1" title="切換花瓣主題色">
+            <button type="button" data-color="#FF8EA1" class="petal-color-btn w-4 h-4 rounded-full bg-[#FF8EA1] ring-2 ring-offset-1 ring-[#78B933]"></button>
+            <button type="button" data-color="#FACC15" class="petal-color-btn w-4 h-4 rounded-full bg-[#FACC15] opacity-70 hover:opacity-100"></button>
+            <button type="button" data-color="#60A5FA" class="petal-color-btn w-4 h-4 rounded-full bg-[#60A5FA] opacity-70 hover:opacity-100"></button>
+            <button type="button" data-color="#F87171" class="petal-color-btn w-4 h-4 rounded-full bg-[#F87171] opacity-70 hover:opacity-100"></button>
+          </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <input type="number" id="current-petals" value="300" min="0" max="2000" step="10"
+            class="w-full bg-white border-2 border-[#B8DCA0] rounded-xl px-3 py-1.5 text-lg text-[#3F6818] font-black text-center focus:outline-none focus:border-[#78B933]">
+        </div>
+
+        <!-- 花瓣快捷鍵 -->
+        <div class="flex flex-wrap gap-1 mt-1.5">
+          <button type="button" data-petal="200" class="quick-petal-btn text-[10px] font-bold bg-white hover:bg-[#E7F4DC] text-[#5C8831] border border-[#C3E2B1] rounded-lg px-2 py-0.5 transition">200 初始滿罐</button>
+          <button type="button" data-petal="300" class="quick-petal-btn text-[10px] font-bold bg-white hover:bg-[#E7F4DC] text-[#5C8831] border border-[#C3E2B1] rounded-lg px-2 py-0.5 transition">300</button>
+          <button type="button" data-petal="500" class="quick-petal-btn text-[10px] font-bold bg-white hover:bg-[#E7F4DC] text-[#5C8831] border border-[#C3E2B1] rounded-lg px-2 py-0.5 transition">500</button>
+          <button type="button" data-petal="1000" class="quick-petal-btn text-[10px] font-bold bg-white hover:bg-[#E7F4DC] text-[#5C8831] border border-[#C3E2B1] rounded-lg px-2 py-0.5 transition">1000</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 核心輸入欄位區 -->
+    <section class="space-y-3.5 bg-[#F7FAF4] p-4 rounded-2xl border-2 border-[#D2E7C4]">
+
+      <!-- 第一排：隊伍皮克敏數 & 預估速度 -->
+      <div class="grid grid-cols-2 gap-3">
+        <!-- 隊伍皮克敏數 -->
+        <div class="bg-white p-2.5 rounded-xl border border-[#DCECD0]">
+          <label for="pikmin-count" class="block text-xs font-extrabold text-[#5C8831] mb-1">
+            🌱 隊伍皮克敏數 (隻)
+          </label>
+          <input type="number" id="pikmin-count" value="40" min="1" max="40"
+            class="w-full bg-[#F9FCF6] border-2 border-[#C3E2B1] rounded-xl px-2 py-1.5 text-base text-[#3F6818] font-black text-center focus:outline-none focus:border-[#78B933]">
+          <div class="flex justify-between gap-1 mt-1.5">
+            <button type="button" data-pikmin="20" class="quick-pikmin-btn flex-1 text-[10px] font-bold bg-[#F2F8EC] hover:bg-[#E2F0D5] text-[#5C8831] rounded py-0.5">20隻</button>
+            <button type="button" data-pikmin="30" class="quick-pikmin-btn flex-1 text-[10px] font-bold bg-[#F2F8EC] hover:bg-[#E2F0D5] text-[#5C8831] rounded py-0.5">30隻</button>
+            <button type="button" data-pikmin="40" class="quick-pikmin-btn flex-1 text-[10px] font-bold bg-[#78B933] text-white rounded py-0.5">40滿隊</button>
+          </div>
+        </div>
+
+        <!-- 預估步行/騎行速度 -->
+        <div class="bg-white p-2.5 rounded-xl border border-[#DCECD0]">
+          <div class="flex items-center justify-between mb-1">
+            <label for="speed" class="text-xs font-extrabold text-[#5C8831]">
+              👟 移動速度 (KM/h)
+            </label>
+            <button type="button" id="gps-toggle-btn" title="開啟真實 GPS 測速與 5 分鐘冷卻格偵測"
+              class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-[#EBF5FF] text-[#2563EB] border border-[#BFDBFE] hover:bg-[#DBEAFE] transition">
+              📡 GPS
+            </button>
+          </div>
+          <input type="number" id="speed" value="10" min="0.5" max="30" step="0.5"
+            class="w-full bg-[#F9FCF6] border-2 border-[#C3E2B1] rounded-xl px-2 py-1.5 text-base text-[#3F6818] font-black text-center focus:outline-none focus:border-[#78B933]">
+          <div class="flex justify-between gap-1 mt-1.5">
+            <button type="button" data-speed="4.5" class="quick-speed-btn flex-1 text-[10px] font-bold bg-[#F2F8EC] hover:bg-[#E2F0D5] text-[#5C8831] rounded py-0.5">散步4.5</button>
+            <button type="button" data-speed="10" class="quick-speed-btn flex-1 text-[10px] font-bold bg-[#78B933] text-white rounded py-0.5">單車10</button>
+            <button type="button" data-speed="16" class="quick-speed-btn flex-1 text-[10px] font-bold bg-[#F2F8EC] hover:bg-[#E2F0D5] text-[#5C8831] rounded py-0.5">快騎16</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- GPS 實時狀態與 5 分鐘網格冷卻面板 (開啟 GPS 時顯示) -->
+      <div id="gps-panel" class="hidden bg-[#EFF6FF] border border-[#BFDBFE] rounded-xl p-2.5 text-xs space-y-1">
+        <div class="flex items-center justify-between">
+          <span class="font-bold text-[#1E40AF] flex items-center gap-1">
+            <span class="w-2 h-2 rounded-full bg-blue-500 animate-ping"></span>
+            GPS 即時追蹤中
+          </span>
+          <span id="gps-status-text" class="text-[11px] text-[#3B82F6] font-semibold">定位中...</span>
+        </div>
+        <div class="flex items-center justify-between text-[11px] text-[#1E3A8A] pt-1 border-t border-[#DBEAFE]">
+          <span>🗺️ 5分鐘種花冷卻格狀態：</span>
+          <span id="cooldown-grid-status" class="font-bold text-emerald-600">✅ 新鮮區域 (100% 產量)</span>
+        </div>
+      </div>
+
+      <!-- 第二排：目標獲得金幣 & 目前花瓣可種出花朵數 -->
+      <div class="grid grid-cols-2 gap-3">
+        <!-- 目標金幣 -->
+        <div class="bg-white p-2.5 rounded-xl border border-[#DCECD0]">
+          <label for="target-coins" class="block text-xs font-extrabold text-[#5C8831] mb-1">
+            🪙 希望獲得金幣 (枚)
+          </label>
+          <input type="number" id="target-coins" value="60" min="1" max="60"
+            class="w-full bg-[#F9FCF6] border-2 border-[#C3E2B1] rounded-xl px-2 py-1.5 text-base text-[#3F6818] font-black text-center focus:outline-none focus:border-[#78B933]">
+          <div class="flex justify-between gap-1 mt-1.5">
+            <button type="button" data-coins="10" class="quick-coin-btn flex-1 text-[10px] font-bold bg-[#F2F8EC] hover:bg-[#E2F0D5] text-[#5C8831] rounded py-0.5">10枚</button>
+            <button type="button" data-coins="30" class="quick-coin-btn flex-1 text-[10px] font-bold bg-[#F2F8EC] hover:bg-[#E2F0D5] text-[#5C8831] rounded py-0.5">30枚</button>
+            <button type="button" data-coins="60" class="quick-coin-btn flex-1 text-[10px] font-bold bg-[#78B933] text-white rounded py-0.5">60滿額</button>
+          </div>
+        </div>
+
+        <!-- 現有花瓣可種植數量 (自動連動計算) -->
+        <div class="bg-gradient-to-b from-[#FFFDF5] to-[#FEF9E7] p-2.5 rounded-xl border-2 border-[#F3E29F] flex flex-col justify-between">
+          <div class="flex items-center justify-between">
+            <span class="text-[11px] font-extrabold text-[#8A6D1B]">
+              🌸 現有花瓣可種植數量
+            </span>
+            <span class="text-[10px] bg-[#FEF3C7] text-[#B45309] px-1.5 py-0.5 rounded font-bold">250朵/幣</span>
+          </div>
+          <div id="current-petals-flowers" class="text-lg font-black text-[#D97706] text-center my-1 tracking-tight">
+            8,850 朵
+          </div>
+          <div class="flex items-center justify-between gap-1">
+            <span id="current-petals-coins-sub" class="text-[10px] font-bold text-[#786221] truncate">
+              約 35 枚金幣 (50分)
+            </span>
+            <button type="button" id="apply-max-coins-btn" title="將目前花瓣能種出的金幣數設為目標"
+              class="text-[10px] font-bold bg-[#F59E0B] hover:bg-[#D97706] text-white rounded px-1.5 py-0.5 transition flex-shrink-0">
+              套用金幣
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 即時計算動態看板 -->
+    <section class="mt-4 p-4 bg-[#FFFDF2] rounded-2xl border-2 border-[#F1E5A5] space-y-2.5 shadow-sm">
+      <div class="flex items-center justify-between border-b border-[#F5ECBE] pb-2">
+        <span class="text-xs font-extrabold text-[#7B6B28] flex items-center gap-1">
+          📊 種花需求與消耗總覽
+        </span>
+        <span id="efficiency-badge" class="text-[11px] font-bold bg-[#FEF3C7] text-[#B45309] px-2 py-0.5 rounded-full">
+          效率 100%
+        </span>
+      </div>
+
+      <div class="grid grid-cols-2 gap-2.5 pt-0.5">
+        <div class="bg-white/90 p-2.5 rounded-xl border border-[#F5ECBE]">
+          <div class="text-[11px] text-[#8A7932] font-semibold">🌸 每分鐘種花速度</div>
+          <div id="flowers-per-min" class="text-base font-black text-[#D97706] mt-0.5">177.0 朵/分</div>
+          <div id="petal-burn-rate" class="text-[10px] text-[#9A8B4F]">每分鐘消耗 6.0 片花瓣</div>
+        </div>
+
+        <div class="bg-white/90 p-2.5 rounded-xl border border-[#F5ECBE]">
+          <div class="text-[11px] text-[#8A7932] font-semibold">🎯 目標種花總數</div>
+          <div id="total-flowers-needed" class="text-base font-black text-[#D97706] mt-0.5">15,000 朵</div>
+          <div id="coins-summary-sub" class="text-[10px] text-[#9A8B4F]">目標 60 枚金幣 (250朵/幣)</div>
+        </div>
+
+        <div class="bg-white/90 p-2.5 rounded-xl border border-[#F5ECBE]">
+          <div class="text-[11px] text-[#8A7932] font-semibold">💧 達標需消耗花瓣</div>
+          <div id="petals-to-consume" class="text-base font-black text-[#E11D48] mt-0.5">468 片</div>
+          <div id="petals-balance-sub" class="text-[10px] font-bold text-emerald-600">存量充足</div>
+        </div>
+
+        <div class="bg-white/90 p-2.5 rounded-xl border border-[#F5ECBE]">
+          <div class="text-[11px] text-[#8A7932] font-semibold">⏳ 達標所需時間</div>
+          <div id="time-needed" class="text-base font-black text-[#2563EB] mt-0.5">78.0 分鐘</div>
+          <div id="eta-clock-sub" class="text-[10px] text-[#64748B]">預計 --:-- 完成</div>
+        </div>
+      </div>
+
+      <!-- 現有花瓣可支撐能力小結 -->
+      <div class="bg-[#F9F5E3] px-3 py-2 rounded-xl flex items-center justify-between text-xs text-[#6B5B1E]">
+        <span>🫙 <b>目前花瓣存量</b>最多可種：</span>
+        <span id="current-jar-capacity" class="font-black text-[#4E7A22]">50.0 分鐘 / 38 枚金幣</span>
+      </div>
+    </section>
+
+    <!-- 警示與提示區 -->
+    <div id="warning-box" class="mt-3.5 p-3 rounded-xl text-xs font-bold hidden leading-relaxed"></div>
+
+    <!-- 鬧鐘模式選擇與啟動按鈕 -->
+    <section class="mt-4 space-y-3">
+      <!-- 鬧鐘提醒策略選擇 -->
+      <div id="alarm-mode-selector" class="bg-[#F2F8EC] p-2 rounded-xl border border-[#D2E7C4] flex items-center justify-between text-xs">
+        <span class="font-bold text-[#4E7A22] pl-1">⏰ 鬧鐘提醒基準：</span>
+        <div class="flex gap-1">
+          <button type="button" id="mode-target-btn" class="px-2.5 py-1 rounded-lg font-bold bg-[#78B933] text-white transition">
+            🪙 金幣達標時
+          </button>
+          <button type="button" id="mode-petal-btn" class="px-2.5 py-1 rounded-lg font-bold text-[#5C8831] hover:bg-white/60 transition">
+            💧 花瓣耗盡前
+          </button>
+        </div>
+      </div>
+
+      <!-- 啟動計時按鈕組 -->
+      <div id="start-controls" class="space-y-2">
+        <button id="start-btn" class="w-full btn-3d-green text-white font-black py-3.5 rounded-2xl text-base tracking-wide flex justify-center items-center gap-2">
+          <span>🚀</span>
+          <span id="start-btn-label">開始種花（設定小隊防浪費鬧鐘）</span>
+        </button>
+      </div>
+
+      <!-- 倒數計時與巨大花朵成長面板 (計時中顯示) -->
+      <div id="timer-panel" class="hidden bg-gradient-to-b from-[#EDF7FF] to-[#E0F2FE] border-2 border-[#7DD3FC] p-4 rounded-2xl text-center space-y-3 shadow-inner">
+        <div class="flex items-center justify-between text-xs font-bold text-[#0369A1]">
+          <span id="active-timer-badge" class="flex items-center gap-1">
+            <span class="w-2 h-2 rounded-full bg-sky-500 animate-ping"></span>
+            種花計時進行中
+          </span>
+          <span id="wakelock-badge" class="text-[10px] bg-white/80 px-2 py-0.5 rounded-full text-[#0284C7]">
+            📱 螢幕常亮保護
+          </span>
+        </div>
+
+        <!-- 巨大花朵 (Big Flower) 動態階段插畫 -->
+        <div class="py-1 flex flex-col items-center justify-center">
+          <div id="big-flower-stage-icon" class="text-5xl flower-sway select-none">🌱</div>
+          <div id="big-flower-stage-text" class="text-xs font-extrabold text-[#0369A1] mt-1">
+            嫩芽階段 (0%) — 皮克敏努力種花中！
+          </div>
+        </div>
+
+        <!-- 倒數大字體 -->
+        <div id="countdown-display" class="text-4xl font-black text-[#0C4A6E] pikmin-font tracking-wider">
+          00:00:00
+        </div>
+
+        <!-- 雙進度指標：即時預估已種花數 & 剩餘花瓣 -->
+        <div class="grid grid-cols-2 gap-2 text-xs bg-white/80 p-2.5 rounded-xl border border-[#BAE6FD]">
+          <div>
+            <div class="text-[10px] text-[#0369A1] font-semibold">🌸 本次已種 / 累積金幣</div>
+            <div id="live-planted-info" class="font-black text-[#0C4A6E] mt-0.5">0 朵 (+0 🪙)</div>
+          </div>
+          <div>
+            <div class="text-[10px] text-[#0369A1] font-semibold">💧 預估剩餘花瓣</div>
+            <div id="live-petal-remaining" class="font-black text-[#E11D48] mt-0.5">300 片</div>
+          </div>
+        </div>
+
+        <!-- 進度條 -->
+        <div class="w-full bg-[#BAE6FD] h-3.5 rounded-full overflow-hidden p-0.5">
+          <div id="timer-progress" class="bg-gradient-to-r from-[#78B933] to-[#38BDF8] h-full rounded-full transition-all duration-500" style="width: 100%"></div>
+        </div>
+
+        <!-- 控制按鈕：暫停/繼續、提前結束 -->
+        <div class="flex items-center justify-center gap-3 pt-1">
+          <button id="pause-btn" class="flex-1 bg-white hover:bg-[#F0F9FF] text-[#0369A1] border border-[#7DD3FC] font-bold py-2 rounded-xl text-xs transition">
+            ⏸️ 暫停計時
+          </button>
+          <button id="stop-btn" class="flex-1 bg-[#FEE2E2] hover:bg-[#FECACA] text-[#B91C1C] border border-[#FCA5A5] font-bold py-2 rounded-xl text-xs transition">
+            ⏹️ 停止並重置
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 底部遊戲公式小抄 (可展開) -->
+    <details class="mt-4 text-xs text-[#5C8831] bg-[#F7FAF4] rounded-xl p-3 border border-[#D2E7C4]">
+      <summary class="font-bold cursor-pointer select-none flex items-center justify-between">
+        <span>📖 皮克敏種花金幣與防浪費公式說明</span>
+        <span class="text-[10px] text-[#78B933]">點擊展開</span>
+      </summary>
+      <ul class="mt-2 space-y-1 text-[11px] text-[#4E7A22] leading-relaxed list-disc pl-4">
+        <li><b>金幣兌換基準</b>：每種滿 <b>250 朵花 = 1 枚金幣</b>（每日上限 60 枚金幣 = 15,000 朵花）。</li>
+        <li><b>隊伍人數倍率 ($M_p$)</b>：以滿隊 40 隻為基準 ($M_p = P / 40$)，隊伍越滿，單步種花半徑與花朵數越高。</li>
+        <li><b>每分鐘種花數 ($F_{\text{current}}$)</b>：滿隊 40 隻於時速 $V$ (KM/h) 下，每分鐘約產出 $(V \times 17.7) \times M_p$ 朵花。</li>
+        <li><b>花瓣消耗率</b>：滿隊 40 隻每 10 秒消耗 1 片花瓣（每分鐘 $6 \times M_p$ 片）。初始滿罐 200 片可種約 33 分 20 秒。</li>
+        <li><b>超速鎖定機制</b>：移動速度超過 <b>20 KM/h</b> 時，遊戲會判定為乘車而停止種花，但<b>花瓣仍會持續消耗</b>！</li>
+        <li><b>5 分鐘冷卻格</b>：同一塊地面種過花後需等 5 分鐘才會再次長花，建議規劃不重疊路線或大圈繞行。</li>
+      </ul>
+    </details>
+  </main>
+
+  <!-- 巨大花朵盛開 / 鬧鐘響鈴全螢幕彈窗 (取代原生阻塞式 alert) -->
+  <div id="alarm-modal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+    <div class="w-full max-w-sm bg-white rounded-3xl border-4 border-[#F59E0B] p-6 text-center shadow-2xl space-y-4 animate-bounce">
+      <div class="text-6xl">🌺🪙🎉</div>
+      <h2 id="alarm-modal-title" class="text-2xl font-black text-[#B45309] pikmin-font">
+        目標金幣已種滿！
+      </h2>
+      <p id="alarm-modal-body" class="text-sm text-[#4B5563] font-medium leading-relaxed">
+        主人！預估時間已到，目標已達成！請立即打開 Pikmin Bloom <b>關閉種花模式</b>，避免珍貴花瓣繼續白白消耗喔！
+      </p>
+      <button id="dismiss-alarm-btn" class="w-full btn-3d-amber text-white font-black py-3.5 rounded-2xl text-base tracking-wide">
+        🔕 我已關閉種花（停止鬧鐘）
+      </button>
+    </div>
+  </div>
+
+  <script>
+    // ==========================================
+    // 1. 核心 DOM 元素與狀態變數
+    // ==========================================
+    const FLOWERS_PER_COIN = 250; // 皮克敏固定 250 朵花兌換 1 枚金幣
+
+    const pikminCountInput = document.getElementById('pikmin-count');
+    const speedInput = document.getElementById('speed');
+    const targetCoinsInput = document.getElementById('target-coins');
+    const currentPetalsInput = document.getElementById('current-petals');
+
+    const currentPetalsFlowersDisp = document.getElementById('current-petals-flowers');
+    const currentPetalsCoinsSub = document.getElementById('current-petals-coins-sub');
+    const applyMaxCoinsBtn = document.getElementById('apply-max-coins-btn');
+
+    const flowersPerMinDisp = document.getElementById('flowers-per-min');
+    const petalBurnRateDisp = document.getElementById('petal-burn-rate');
+    const totalFlowersDisp = document.getElementById('total-flowers-needed');
+    const coinsSummarySub = document.getElementById('coins-summary-sub');
+    const petalsConsumeDisp = document.getElementById('petals-to-consume');
+    const petalsBalanceSub = document.getElementById('petals-balance-sub');
+    const timeNeededDisp = document.getElementById('time-needed');
+    const etaClockSub = document.getElementById('eta-clock-sub');
+    const currentJarCapacity = document.getElementById('current-jar-capacity');
+    const efficiencyBadge = document.getElementById('efficiency-badge');
+
+    const jarFill = document.getElementById('jar-fill');
+    const jarPercentText = document.getElementById('jar-percent-text');
+    const jarTimeText = document.getElementById('jar-time-text');
+
+    const warningBox = document.getElementById('warning-box');
+    const startBtn = document.getElementById('start-btn');
+    const startBtnLabel = document.getElementById('start-btn-label');
+    const startControls = document.getElementById('start-controls');
+    const pauseBtn = document.getElementById('pause-btn');
+    const stopBtn = document.getElementById('stop-btn');
+    const timerPanel = document.getElementById('timer-panel');
+    const countdownDisplay = document.getElementById('countdown-display');
+    const timerProgress = document.getElementById('timer-progress');
+    const bigFlowerStageIcon = document.getElementById('big-flower-stage-icon');
+    const bigFlowerStageText = document.getElementById('big-flower-stage-text');
+    const livePlantedInfo = document.getElementById('live-planted-info');
+    const livePetalRemaining = document.getElementById('live-petal-remaining');
+
+    const modeTargetBtn = document.getElementById('mode-target-btn');
+    const modePetalBtn = document.getElementById('mode-petal-btn');
+    const testSoundBtn = document.getElementById('test-sound-btn');
+    const alarmModal = document.getElementById('alarm-modal');
+    const alarmModalTitle = document.getElementById('alarm-modal-title');
+    const alarmModalBody = document.getElementById('alarm-modal-body');
+    const dismissAlarmBtn = document.getElementById('dismiss-alarm-btn');
+
+    const gpsToggleBtn = document.getElementById('gps-toggle-btn');
+    const gpsPanel = document.getElementById('gps-panel');
+    const gpsStatusText = document.getElementById('gps-status-text');
+    const cooldownGridStatus = document.getElementById('cooldown-grid-status');
+
+    // 狀態管理
+    let alarmMode = 'target'; // 'target' (金幣達標) 或 'petal' (花瓣耗盡前)
+    let activePetalColor = '#FF8EA1';
+    let cooldownPenaltyFactor = 1.0; // 5分鐘冷卻重疊懲罰係數 (1.0 = 無重疊, 0.35 = 重疊區)
+    let latestMaxCoinsFromJar = 0;
+
+    // 計時器精準時間戳管理 (防止手機背景凍結誤差)
+    let countdownInterval = null;
+    let alarmLoopInterval = null;
+    let audioContext = null;
+    let wakeLockSentinel = null;
+    let timerState = {
+      isRunning: false,
+      isPaused: false,
+      totalSeconds: 0,
+      remainingSeconds: 0,
+      endTimeMs: 0,
+      startPetals: 0,
+      flowersPerSec: 0,
+      petalsPerSec: 0
+    };
+
+    // ==========================================
+    // 2. 讀取與儲存使用者偏好設定 (LocalStorage)
+    // ==========================================
+    function loadSavedSettings() {
+      try {
+        const saved = JSON.parse(localStorage.getItem('pikmin_timer_settings') || '{}');
+        if (saved.pikminCount) pikminCountInput.value = saved.pikminCount;
+        if (saved.speed) speedInput.value = saved.speed;
+        if (saved.targetCoins) targetCoinsInput.value = saved.targetCoins;
+        if (saved.currentPetals !== undefined) currentPetalsInput.value = saved.currentPetals;
+      } catch (e) {
+        console.warn('無法載入設定:', e);
+      }
+    }
+
+    function saveSettings() {
+      try {
+        localStorage.setItem('pikmin_timer_settings', JSON.stringify({
+          pikminCount: pikminCountInput.value,
+          speed: speedInput.value,
+          targetCoins: targetCoinsInput.value,
+          currentPetals: currentPetalsInput.value
+        }));
+      } catch (e) {}
+    }
+
+    // ==========================================
+    // 3. 核心種花與花瓣消耗計算邏輯
+    // ==========================================
+    function calculateData() {
+      const P = Math.max(0, Math.min(100, parseInt(pikminCountInput.value) || 0));
+      const V = Math.max(0, parseFloat(speedInput.value) || 0);
+      const G = Math.max(1, parseInt(targetCoinsInput.value) || 0);
+      const currentPetals = Math.max(0, parseInt(currentPetalsInput.value) || 0);
+
+      // 1. 隊伍人數加成倍率 Mp (以 40 隻為基準)
+      const Mp = P / 40;
+
+      // 2. 每分鐘種花產量 Fcurrent (超過 20 km/h 遊戲觸發超速鎖，產量歸零)
+      const isOverspeed = V > 20;
+      const rawFcurrent = (V * 17.7) * Mp * cooldownPenaltyFactor;
+      const Fcurrent = isOverspeed ? 0 : rawFcurrent;
+
+      // 3. 目標種花總數 Ftarget (固定 250 朵換 1 枚金幣)
+      const Ftarget = G * FLOWERS_PER_COIN;
+
+      // 4. 達標所需總時間 Tneed (分鐘)
+      const Tneed = Fcurrent > 0 ? (Ftarget / Fcurrent) : 0;
+
+      // 5. 每分鐘花瓣消耗率與總消耗花瓣 Lconsume
+      // 基準：40隻皮克敏每分鐘消耗 6 片花瓣 (每10秒1片)
+      const petalBurnPerMin = 6 * Mp;
+      const Lconsume = Tneed * petalBurnPerMin;
+
+      // 6. 目前花瓣存量可維持的最大時間 Tmax (分鐘)、可種出總花數與金幣數
+      const Tmax = petalBurnPerMin > 0 ? (currentPetals / petalBurnPerMin) : 0;
+      const maxFlowersFromJar = Math.floor(Tmax * Fcurrent);
+      const maxCoinsFromJar = Math.floor(maxFlowersFromJar / FLOWERS_PER_COIN);
+      latestMaxCoinsFromJar = maxCoinsFromJar;
+
+      // --- 更新「🌸 目前花瓣可種出」專屬欄位 ---
+      currentPetalsFlowersDisp.innerText = `${maxFlowersFromJar.toLocaleString()} 朵`;
+      currentPetalsCoinsSub.innerText = `約 ${Math.min(60, maxCoinsFromJar)} 枚金幣 (${Tmax.toFixed(1)}分)`;
+
+      // --- 更新花瓣玻璃罐視覺 ---
+      const jarFillPercent = Math.min(100, Math.round((currentPetals / 300) * 100));
+      jarFill.style.height = `${jarFillPercent}%`;
+      jarFill.style.backgroundColor = activePetalColor;
+      jarPercentText.innerText = `${currentPetals}片`;
+      jarTimeText.innerText = `約${Math.floor(Tmax)}分`;
+
+      // --- 更新看板數據 ---
+      flowersPerMinDisp.innerText = `${Fcurrent.toFixed(1)} 朵/分`;
+      petalBurnRateDisp.innerText = `每分鐘消耗 ${petalBurnPerMin.toFixed(1)} 片花瓣`;
+      totalFlowersDisp.innerText = `${Ftarget.toLocaleString()} 朵`;
+      coinsSummarySub.innerText = `目標 ${G} 枚金幣 (250朵/幣)`;
+
+      petalsConsumeDisp.innerText = `${Math.ceil(Lconsume)} 片`;
+
+      const petalDiff = currentPetals - Math.ceil(Lconsume);
+      if (petalDiff >= 0) {
+        petalsBalanceSub.className = 'text-[10px] font-bold text-emerald-600';
+        petalsBalanceSub.innerText = `完成後還剩 ${petalDiff} 片花瓣`;
+      } else {
+        petalsBalanceSub.className = 'text-[10px] font-bold text-rose-600';
+        petalsBalanceSub.innerText = `還差 ${Math.abs(petalDiff)} 片 (中途需補精華)`;
+      }
+
+      const totalSecondsTarget = Math.ceil(Tneed * 60);
+      const totalSecondsPetal = Math.max(0, Math.floor(Tmax * 60));
+
+      timeNeededDisp.innerText = `${Tneed.toFixed(1)} 分鐘`;
+      if (totalSecondsTarget > 0) {
+        const etaDate = new Date(Date.now() + totalSecondsTarget * 1000);
+        const hh = etaDate.getHours().toString().padStart(2, '0');
+        const mm = etaDate.getMinutes().toString().padStart(2, '0');
+        etaClockSub.innerText = `預計 ${hh}:${mm} 達成目標 (${totalSecondsTarget}秒)`;
+      } else {
+        etaClockSub.innerText = `無需額外時間`;
+      }
+
+      currentJarCapacity.innerText = `${maxFlowersFromJar.toLocaleString()} 朵 (${Tmax.toFixed(1)} 分鐘 / 約 ${Math.min(60, maxCoinsFromJar)} 枚金幣)`;
+      efficiencyBadge.innerText = `隊伍效率 ${Math.round(Mp * cooldownPenaltyFactor * 100)}%`;
+
+      // --- 智慧安全警告機制 ---
+      warningBox.className = 'mt-3.5 p-3 rounded-xl text-xs font-bold leading-relaxed ';
+      if (isOverspeed) {
+        warningBox.classList.remove('hidden');
+        warningBox.classList.add('bg-red-100', 'text-red-700', 'border', 'border-red-300');
+        warningBox.innerHTML = '⚠️ <b>超速警告 (超過 20 KM/h)</b>：系統會判定為開車而<b>完全種不出花</b>，但花瓣仍會持續被吃掉！請減速至 20 KM/h 以下。';
+        startBtn.disabled = true;
+        startBtn.classList.add('opacity-50', 'cursor-not-allowed');
+      } else if (P === 0 || V === 0) {
+        warningBox.classList.remove('hidden');
+        warningBox.classList.add('bg-amber-100', 'text-amber-800', 'border', 'border-amber-300');
+        warningBox.innerText = '🌱 請輸入大於 0 的皮克敏隊伍數量與移動速度。';
+        startBtn.disabled = true;
+        startBtn.classList.add('opacity-50', 'cursor-not-allowed');
+      } else if (currentPetals < Lconsume) {
+        warningBox.classList.remove('hidden');
+        warningBox.classList.add('bg-amber-50', 'text-amber-800', 'border', 'border-amber-300');
+        warningBox.innerHTML = `⚠️ <b>花瓣存量不足提醒</b>：現有 ${currentPetals} 片花瓣將在第 <b>${Tmax.toFixed(1)} 分鐘</b>耗盡（可種出 <b>${maxFlowersFromJar.toLocaleString()} 朵花</b> ≈ ${maxCoinsFromJar} 枚金幣）。建議切換下方「💧 花瓣耗盡前」鬧鐘，或準備 <b>${Math.ceil(Lconsume - currentPetals)} 片</b>精華中途補充！`;
+        startBtn.disabled = false;
+        startBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+      } else if (P < 40) {
+        warningBox.classList.remove('hidden');
+        warningBox.classList.add('bg-emerald-50', 'text-emerald-800', 'border', 'border-emerald-200');
+        warningBox.innerHTML = `💡 <b>小隊提示</b>：目前隊伍 ${P} 隻未滿 40 隻，種花效率為滿隊的 ${Math.round(Mp * 100)}%。補滿 40 隻可大幅縮短種花時間！`;
+        startBtn.disabled = false;
+        startBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+      } else {
+        warningBox.classList.add('hidden');
+        startBtn.disabled = false;
+        startBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+      }
+
+      // 根據所選鬧鐘模式決定倒數秒數
+      const chosenSeconds = alarmMode === 'petal'
+        ? Math.max(0, totalSecondsPetal)
+        : totalSecondsTarget;
+
+      if (alarmMode === 'petal') {
+        startBtnLabel.innerText = `🚀 開始計時（花瓣耗盡鬧鐘：${Tmax.toFixed(1)} 分）`;
+      } else {
+        startBtnLabel.innerText = `🚀 開始種花（金幣達標鬧鐘：${Tneed.toFixed(1)} 分）`;
+      }
+
+      saveSettings();
+
+      return {
+        totalSeconds: chosenSeconds,
+        Fcurrent,
+        petalBurnPerMin,
+        currentPetals,
+        G
+      };
+    }
+
+    // ==========================================
+    // 4. Web Audio API 輕快皮克敏風鈴聲 & 通知
+    // ==========================================
+    function playPikminChime() {
+      try {
+        if (!audioContext) {
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioContext.state === 'suspended') {
+          audioContext.resume();
+        }
+        const now = audioContext.currentTime;
+        // 輕快五聲音階旋律 (D5 -> F#5 -> A5 -> D6)
+        const notes = [587.33, 739.99, 880.00, 1174.66];
+        notes.forEach((freq, idx) => {
+          const osc = audioContext.createOscillator();
+          const gain = audioContext.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(freq, now + idx * 0.14);
+
+          gain.gain.setValueAtTime(0.001, now + idx * 0.14);
+          gain.gain.linearRampToValueAtTime(0.45, now + idx * 0.14 + 0.03);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.14 + 0.45);
+
+          osc.connect(gain);
+          gain.connect(audioContext.destination);
+          osc.start(now + idx * 0.14);
+          osc.stop(now + idx * 0.14 + 0.46);
+        });
+
+        if ('vibrate' in navigator) {
+          navigator.vibrate([250, 100, 250]);
+        }
+      } catch (e) {
+        console.warn('音效播放失敗:', e);
+      }
+    }
+
+    function sendSystemNotification(title, body) {
+      if (!('Notification' in window)) return;
+      if (Notification.permission === 'granted') {
+        if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+          navigator.serviceWorker.controller.postMessage({
+            type: 'SHOW_NOTIFICATION',
+            title,
+            body,
+            tag: 'pikmin-bloom-alarm'
+          });
+        } else {
+          new Notification(title, {
+            body,
+            icon: './icon.svg'
+          });
+        }
+      }
+    }
+
+    // ==========================================
+    // 5. 螢幕常亮保護 (Screen Wake Lock API)
+    // ==========================================
+    async function requestWakeLock() {
+      const badge = document.getElementById('wakelock-badge');
+      if ('wakeLock' in navigator) {
+        try {
+          wakeLockSentinel = await navigator.wakeLock.request('screen');
+          badge.innerText = '📱 螢幕常亮保護中';
+        } catch (err) {
+          badge.innerText = '⚡ 背景精準計時中';
+        }
+      } else {
+        badge.innerText = '⚡ 背景精準計時中';
+      }
+    }
+
+    async function releaseWakeLock() {
+      if (wakeLockSentinel) {
+        try {
+          await wakeLockSentinel.release();
+          wakeLockSentinel = null;
+        } catch (e) {}
+      }
+    }
+
+    // ==========================================
+    // 6. 精準倒數計時器與巨大花朵成長動畫
+    // ==========================================
+    function formatHMS(seconds) {
+      const s = Math.max(0, Math.ceil(seconds));
+      const hrs = Math.floor(s / 3600).toString().padStart(2, '0');
+      const mins = Math.floor((s % 3600) / 60).toString().padStart(2, '0');
+      const secs = (s % 60).toString().padStart(2, '0');
+      return `${hrs}:${mins}:${secs}`;
+    }
+
+    function updateBigFlowerStage(progressDoneRatio) {
+      const pct = Math.min(100, Math.max(0, Math.round(progressDoneRatio * 100)));
+      if (pct < 25) {
+        bigFlowerStageIcon.innerText = '🌱';
+        bigFlowerStageText.innerText = `嫩芽階段 (${pct}%) — 皮克敏努力灑花瓣中！`;
+      } else if (pct < 65) {
+        bigFlowerStageIcon.innerText = '🌿';
+        bigFlowerStageText.innerText = `茂盛綠葉 (${pct}%) — 花朵持續累積中！`;
+      } else if (pct < 95) {
+        bigFlowerStageIcon.innerText = '🌷';
+        bigFlowerStageText.innerText = `含苞待放 (${pct}%) — 巨大花朵即將盛開！`;
+      } else {
+        bigFlowerStageIcon.innerText = '🌸';
+        bigFlowerStageText.innerText = `即將大噴發 (${pct}%) — 準備收成並關閉種花！`;
+      }
+    }
+
+    function startTimer() {
+      if ('Notification' in window && Notification.permission === 'default') {
+        Notification.requestPermission();
+      }
+
+      const calc = calculateData();
+      if (calc.totalSeconds <= 0) return;
+
+      clearInterval(countdownInterval);
+      stopAlarmLoop();
+
+      timerState = {
+        isRunning: true,
+        isPaused: false,
+        totalSeconds: calc.totalSeconds,
+        remainingSeconds: calc.totalSeconds,
+        endTimeMs: Date.now() + calc.totalSeconds * 1000,
+        startPetals: calc.currentPetals,
+        flowersPerSec: calc.Fcurrent / 60,
+        petalsPerSec: calc.petalBurnPerMin / 60
+      };
+
+      timerPanel.classList.remove('hidden');
+      startControls.classList.add('hidden');
+      pauseBtn.innerText = '⏸️ 暫停計時';
+
+      requestWakeLock();
+      tickTimer();
+      countdownInterval = setInterval(tickTimer, 250);
+    }
+
+    function tickTimer() {
+      if (!timerState.isRunning || timerState.isPaused) return;
+
+      const now = Date.now();
+      const remainingSec = Math.max(0, Math.ceil((timerState.endTimeMs - now) / 1000));
+      timerState.remainingSeconds = remainingSec;
+
+      const elapsedSec = Math.max(0, timerState.totalSeconds - remainingSec);
+      const progressRemainingPct = timerState.totalSeconds > 0
+        ? (remainingSec / timerState.totalSeconds) * 100
+        : 0;
+      const doneRatio = timerState.totalSeconds > 0
+        ? elapsedSec / timerState.totalSeconds
+        : 1;
+
+      countdownDisplay.innerText = formatHMS(remainingSec);
+      timerProgress.style.width = `${progressRemainingPct}%`;
+      updateBigFlowerStage(doneRatio);
+
+      // 即時計算本次已種花朵與剩餘花瓣
+      const plantedNow = Math.floor(elapsedSec * timerState.flowersPerSec);
+      const earnedCoinsNow = Math.floor(plantedNow / FLOWERS_PER_COIN);
+      const remainingPetalsNow = Math.max(0, Math.ceil(timerState.startPetals - elapsedSec * timerState.petalsPerSec));
+
+      livePlantedInfo.innerText = `${plantedNow.toLocaleString()} 朵 (+${earnedCoinsNow} 🪙)`;
+      livePetalRemaining.innerText = `${remainingPetalsNow} 片`;
+
+      if (remainingSec <= 0) {
+        triggerAlarmComplete();
+      }
+    }
+
+    function togglePauseTimer() {
+      if (!timerState.isRunning) return;
+      if (!timerState.isPaused) {
+        timerState.isPaused = true;
+        pauseBtn.innerText = '▶️ 繼續計時';
+        document.getElementById('active-timer-badge').innerText = '⏸️ 計時已暫停';
+      } else {
+        timerState.isPaused = false;
+        timerState.endTimeMs = Date.now() + timerState.remainingSeconds * 1000;
+        pauseBtn.innerText = '⏸️ 暫停計時';
+        document.getElementById('active-timer-badge').innerHTML = '<span class="w-2 h-2 rounded-full bg-sky-500 animate-ping"></span> 種花計時進行中';
+      }
+    }
+
+    function triggerAlarmComplete() {
+      clearInterval(countdownInterval);
+      timerState.isRunning = false;
+      releaseWakeLock();
+
+      bigFlowerStageIcon.innerText = '🌺';
+      bigFlowerStageText.innerText = '🎉 目標達成！請立即關閉種花模式！';
+
+      const isPetalMode = alarmMode === 'petal';
+      const title = isPetalMode ? '💧 花瓣即將耗盡提醒！' : '🌸 皮克敏金幣種滿啦！';
+      const body = isPetalMode
+        ? '主人！花瓣罐已經見底囉，快補充精華或關閉種花，別讓加成中斷！'
+        : `主人！預估時間已到，${targetCoinsInput.value} 枚金幣目標已達成，快關閉種花避免浪費珍貴花瓣喔！`;
+
+      alarmModalTitle.innerText = title;
+      alarmModalBody.innerHTML = body;
+      alarmModal.classList.remove('hidden');
+      alarmModal.classList.add('flex');
+
+      playPikminChime();
+      alarmLoopInterval = setInterval(playPikminChime, 2200);
+      sendSystemNotification(title, body);
+    }
+
+    function stopAlarmLoop() {
+      if (alarmLoopInterval) {
+        clearInterval(alarmLoopInterval);
+        alarmLoopInterval = null;
+      }
+      if ('vibrate' in navigator) {
+        navigator.vibrate(0);
+      }
+      alarmModal.classList.add('hidden');
+      alarmModal.classList.remove('flex');
+    }
+
+    function resetTimerUI() {
+      clearInterval(countdownInterval);
+      stopAlarmLoop();
+      releaseWakeLock();
+      timerState.isRunning = false;
+      timerPanel.classList.add('hidden');
+      startControls.classList.remove('hidden');
+    }
+
+    // ==========================================
+    // 7. 進階功能：GPS 實時速度與 5 分鐘冷卻格偵測
+    // ==========================================
+    let gpsWatchId = null;
+    const plantedGridHistory = new Map(); // key: "latGrid,lngGrid", value: timestampMs
+
+    function getGridKey(lat, lng) {
+      // 約 50 公尺網格 (0.00045 度約 50m)
+      const latGrid = Math.floor(lat / 0.00045);
+      const lngGrid = Math.floor(lng / 0.00045);
+      return `${latGrid},${lngGrid}`;
+    }
+
+    function toggleGPS() {
+      if (gpsWatchId !== null) {
+        navigator.geolocation.clearWatch(gpsWatchId);
+        gpsWatchId = null;
+        cooldownPenaltyFactor = 1.0;
+        gpsPanel.classList.add('hidden');
+        gpsToggleBtn.classList.remove('bg-[#2563EB]', 'text-white');
+        gpsToggleBtn.classList.add('bg-[#EBF5FF]', 'text-[#2563EB]');
+        calculateData();
+        return;
+      }
+
+      if (!('geolocation' in navigator)) {
+        alert('您的裝置或瀏覽器不支援 GPS 定位功能。');
+        return;
+      }
+
+      gpsPanel.classList.remove('hidden');
+      gpsToggleBtn.classList.remove('bg-[#EBF5FF]', 'text-[#2563EB]');
+      gpsToggleBtn.classList.add('bg-[#2563EB]', 'text-white');
+      gpsStatusText.innerText = '正在取得衛星訊號...';
+
+      gpsWatchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const { latitude, longitude, speed } = pos.coords;
+          const now = Date.now();
+
+          // 換算 m/s -> km/h
+          if (speed !== null && speed >= 0) {
+            const kmh = Math.max(0.5, Math.round(speed * 3.6 * 10) / 10);
+            speedInput.value = kmh;
+            gpsStatusText.innerText = `實時時速 ${kmh.toFixed(1)} KM/h`;
+          } else {
+            gpsStatusText.innerText = `已定位 (等待移動測速)`;
+          }
+
+          // 清理超過 5 分鐘 (300,000 ms) 的歷史網格
+          for (const [key, ts] of plantedGridHistory.entries()) {
+            if (now - ts > 300000) plantedGridHistory.delete(key);
+          }
+
+          const currentKey = getGridKey(latitude, longitude);
+          const lastVisited = plantedGridHistory.get(currentKey);
+
+          // 若距離上次進入該網格超過 30 秒但小於 5 分鐘，視為重疊踏入冷卻區
+          if (lastVisited && (now - lastVisited > 30000) && (now - lastVisited < 300000)) {
+            const remainCooldownSec = Math.ceil((300000 - (now - lastVisited)) / 1000);
+            cooldownPenaltyFactor = 0.35;
+            cooldownGridStatus.className = 'font-bold text-amber-600';
+            cooldownGridStatus.innerText = `⚠️ 5分鐘冷卻重疊區 (剩 ${remainCooldownSec}秒)`;
+          } else {
+            if (!lastVisited) plantedGridHistory.set(currentKey, now);
+            cooldownPenaltyFactor = 1.0;
+            cooldownGridStatus.className = 'font-bold text-emerald-600';
+            cooldownGridStatus.innerText = '✅ 新鮮種花區域 (100% 產量)';
+          }
+
+          calculateData();
+        },
+        (err) => {
+          gpsStatusText.innerText = '定位失敗或未授權，維持手動速度';
+        },
+        { enableHighAccuracy: true, maximumAge: 3000, timeout: 10000 }
+      );
+    }
+
+    // ==========================================
+    // 8. 互動事件綁定 (快捷按鈕、模式切換、PWA安裝)
+    // ==========================================
+    [pikminCountInput, speedInput, targetCoinsInput, currentPetalsInput].forEach((input) => {
+      input.addEventListener('input', calculateData);
+    });
+
+    // 將目前花瓣可種出的金幣數直接套用為目標金幣
+    applyMaxCoinsBtn.addEventListener('click', () => {
+      const targetVal = Math.max(1, Math.min(60, latestMaxCoinsFromJar));
+      targetCoinsInput.value = targetVal;
+      document.querySelectorAll('.quick-coin-btn').forEach((b) => {
+        if (parseInt(b.dataset.coins) === targetVal) {
+          b.className = 'quick-coin-btn flex-1 text-[10px] font-bold bg-[#78B933] text-white rounded py-0.5';
+        } else {
+          b.className = 'quick-coin-btn flex-1 text-[10px] font-bold bg-[#F2F8EC] hover:bg-[#E2F0D5] text-[#5C8831] rounded py-0.5';
+        }
+      });
+      calculateData();
+    });
+
+    // 花瓣快捷鍵
+    document.querySelectorAll('.quick-petal-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        currentPetalsInput.value = btn.dataset.petal;
+        calculateData();
+      });
+    });
+
+    // 皮克敏數量快捷鍵
+    document.querySelectorAll('.quick-pikmin-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        pikminCountInput.value = btn.dataset.pikmin;
+        document.querySelectorAll('.quick-pikmin-btn').forEach((b) => {
+          b.className = 'quick-pikmin-btn flex-1 text-[10px] font-bold bg-[#F2F8EC] hover:bg-[#E2F0D5] text-[#5C8831] rounded py-0.5';
+        });
+        btn.className = 'quick-pikmin-btn flex-1 text-[10px] font-bold bg-[#78B933] text-white rounded py-0.5';
+        calculateData();
+      });
+    });
+
+    // 速度快捷鍵
+    document.querySelectorAll('.quick-speed-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        speedInput.value = btn.dataset.speed;
+        document.querySelectorAll('.quick-speed-btn').forEach((b) => {
+          b.className = 'quick-speed-btn flex-1 text-[10px] font-bold bg-[#F2F8EC] hover:bg-[#E2F0D5] text-[#5C8831] rounded py-0.5';
+        });
+        btn.className = 'quick-speed-btn flex-1 text-[10px] font-bold bg-[#78B933] text-white rounded py-0.5';
+        calculateData();
+      });
+    });
+
+    // 金幣快捷鍵
+    document.querySelectorAll('.quick-coin-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        targetCoinsInput.value = btn.dataset.coins;
+        document.querySelectorAll('.quick-coin-btn').forEach((b) => {
+          b.className = 'quick-coin-btn flex-1 text-[10px] font-bold bg-[#F2F8EC] hover:bg-[#E2F0D5] text-[#5C8831] rounded py-0.5';
+        });
+        btn.className = 'quick-coin-btn flex-1 text-[10px] font-bold bg-[#78B933] text-white rounded py-0.5';
+        calculateData();
+      });
+    });
+
+    // 花瓣罐顏色切換
+    document.querySelectorAll('.petal-color-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        activePetalColor = btn.dataset.color;
+        document.querySelectorAll('.petal-color-btn').forEach((b) => {
+          b.classList.remove('ring-2', 'ring-offset-1', 'ring-[#78B933]', 'opacity-100');
+          b.classList.add('opacity-70');
+        });
+        btn.classList.remove('opacity-70');
+        btn.classList.add('ring-2', 'ring-offset-1', 'ring-[#78B933]', 'opacity-100');
+        calculateData();
+      });
+    });
+
+    // 鬧鐘基準模式切換
+    modeTargetBtn.addEventListener('click', () => {
+      alarmMode = 'target';
+      modeTargetBtn.className = 'px-2.5 py-1 rounded-lg font-bold bg-[#78B933] text-white transition';
+      modePetalBtn.className = 'px-2.5 py-1 rounded-lg font-bold text-[#5C8831] hover:bg-white/60 transition';
+      calculateData();
+    });
+
+    modePetalBtn.addEventListener('click', () => {
+      alarmMode = 'petal';
+      modePetalBtn.className = 'px-2.5 py-1 rounded-lg font-bold bg-[#E11D48] text-white transition';
+      modeTargetBtn.className = 'px-2.5 py-1 rounded-lg font-bold text-[#5C8831] hover:bg-white/60 transition';
+      calculateData();
+    });
+
+    startBtn.addEventListener('click', startTimer);
+    pauseBtn.addEventListener('click', togglePauseTimer);
+    stopBtn.addEventListener('click', resetTimerUI);
+    dismissAlarmBtn.addEventListener('click', resetTimerUI);
+    testSoundBtn.addEventListener('click', playPikminChime);
+    gpsToggleBtn.addEventListener('click', toggleGPS);
+
+    // ==========================================
+    // 9. 背景漂浮花瓣生成動畫
+    // ==========================================
+    const petalContainer = document.getElementById('petal-container');
+    function createPetal() {
+      if (document.hidden) return;
+      const petal = document.createElement('div');
+      petal.classList.add('petal');
+      petal.style.left = Math.random() * 100 + 'vw';
+      const size = Math.random() * 9 + 7;
+      petal.style.width = `${size}px`;
+      petal.style.height = `${size}px`;
+      petal.style.animationDuration = Math.random() * 4 + 6 + 's';
+      const colors = [activePetalColor, '#FFE17D', '#FFFFFF', '#FFB3C1'];
+      petal.style.background = colors[Math.floor(Math.random() * colors.length)];
+      petalContainer.appendChild(petal);
+      setTimeout(() => petal.remove(), 10000);
+    }
+    setInterval(createPetal, 550);
+
+    // ==========================================
+    // 10. PWA Service Worker 註冊與安裝提示
+    // ==========================================
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./sw.js').catch((err) => {
+          console.warn('Service Worker 註冊略過:', err);
+        });
+      });
+    }
+
+    let deferredPrompt = null;
+    const installPwaBtn = document.getElementById('install-pwa-btn');
+    window.addEventListener('beforeinstallprompt', (e) => {
+      e.preventDefault();
+      deferredPrompt = e;
+      installPwaBtn.classList.remove('hidden');
+    });
+
+    installPwaBtn.addEventListener('click', async () => {
+      if (!deferredPrompt) return;
+      deferredPrompt.prompt();
+      await deferredPrompt.userChoice;
+      deferredPrompt = null;
+      installPwaBtn.classList.add('hidden');
+    });
+
+    // 初始化執行
+    loadSavedSettings();
+    calculateData();
+  </script>
+</body>
+</html>
